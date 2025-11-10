@@ -8,15 +8,17 @@ import numpy as np
 # CONFIG
 # ============================================================
 
-# --- CAMBIO AQUÍ: Usamos la ruta real del proyecto ---
+# Apuntamos a la raíz del proyecto
 BASE_PROJECT_PATH = "/lustre/proyectos/p037"
 
-# Asumimos que la carpeta '114239...' está dentro de 'raw'
-RAW_DATA_ROOT = f"{BASE_PROJECT_PATH}/datasets/raw/114239_nfl_competition_files_published_analytics_final"
+# Esta es la ruta raíz de los datos que encontramos
+ACTUAL_DATA_ROOT = f"{BASE_PROJECT_PATH}/datasets/raw/114239_nfl_competition_files_published_analytics_final"
 
-TRAIN_PATH = f"{RAW_DATA_ROOT}/train"
-SUPPLEMENTARY = f"{RAW_DATA_ROOT}/supplementary_data.csv"
+# Actualizamos todas las rutas para usarla
+TRAIN_PATH = f"{ACTUAL_DATA_ROOT}/train"
+SUPPLEMENTARY = f"{ACTUAL_DATA_ROOT}/supplementary_data.csv"
 
+# El destino sigue siendo el mismo
 OUTPUT_DIR = f"{BASE_PROJECT_PATH}/datasets/processed"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -89,39 +91,48 @@ def compress_play(df):
 # =================================G===========================
 
 def main():
-    print("Cargando supplementary data...")
-    supp = pd.read_csv(SUPPLEMENTARY)
+    print("Cargando supplementary data...", flush=True)
+    
+    # Añadimos low_memory=False para silenciar el DtypeWarning
+    supp = pd.read_csv(SUPPLEMENTARY, low_memory=False)
 
-    print("Buscando archivos de tracking...")
-    # Tus globs originales
-    input_files = sorted(glob.glob(f"{TRAIN_PATH}/input_2023_w*.csv"))
-    output_files = sorted(glob.glob(f"{RAW_DATA_ROOT}/output_2023_w*.csv")) # Ojo: este está en RAW_DATA_ROOT
+    print("Buscando archivos de tracking...", flush=True)
+    
+    # --- CAMBIO AQUÍ: Usamos 'w??.csv' para ser más específicos ---
+    input_files = sorted(glob.glob(f"{TRAIN_PATH}/input_2023_w??.csv"))
+    output_files = sorted(glob.glob(f"{TRAIN_PATH}/output_2023_w??.csv"))
+    
+    print(f"--- DEBUG: Encontrados {len(input_files)} input y {len(output_files)} output ---", flush=True)
 
     if not input_files or not output_files:
-        print("Error: No se encontraron archivos de input u output. Revisa las rutas.")
-        print(f"Buscando en: {TRAIN_PATH}")
-        print(f"Buscando en: {RAW_DATA_ROOT}")
+        print("Error: No se encontraron archivos de input u output. Revisa las rutas.", flush=True)
+        print(f"Buscando en (input): {TRAIN_PATH}", flush=True)
+        print(f"Buscando en (output): {TRAIN_PATH}", flush=True)
         return
 
-    print(f"Encontrados {len(input_files)} archivos de input y {len(output_files)} de output.")
+    print(f"Encontrados {len(input_files)} archivos de input y {len(output_files)} de output.", flush=True)
     all_plays = []
 
     for in_path, out_path in zip(input_files, output_files):
 
-        print(f"Procesando {in_path} y {out_path}...")
+        print(f"Procesando {in_path} y {out_path}...", flush=True)
         input_df = pd.read_csv(in_path)
         output_df = pd.read_csv(out_path)
 
-        # Flip direction to unify field orientation
-        input_df = flip_play_direction(input_df)
-        output_df = flip_play_direction(output_df)
-
-        # Fix physical cols (height etc)
-        # Solo los inputs suelen tener 'player_height'
+        # --- CAMBIO DE LÓGICA ---
+        
+        # 1. Arregla altura, etc. en el input
         input_df = normalize_physical_columns(input_df)
 
-        # Merge input + output frames
+        # 2. Únelos. 'play_direction' será NaN para las filas de output
         merged = merge_input_output(input_df, output_df)
+        
+        # 3. Rellena 'play_direction' para toda la jugada
+        # (Asumiendo que es constante por 'play_id')
+        merged['play_direction'] = merged.groupby('play_id')['play_direction'].ffill().bfill()
+        
+        # 4. AHORA SÍ, voltea el dataframe completo
+        merged = flip_play_direction(merged)
 
         # Merge with supplementary metadata (game, EPA, etc.)
         merged = merged.merge(
@@ -137,16 +148,16 @@ def main():
             all_plays.append(processed)
 
     if not all_plays:
-        print("No se procesaron jugadas.")
+        print("No se procesaron jugadas.", flush=True)
         return
 
-    print(f"Total de jugadas procesadas: {len(all_plays)}")
+    print(f"Total de jugadas procesadas: {len(all_plays)}", flush=True)
 
     # Save all plays as parquet list (fast, compressed)
     out_file = f"{OUTPUT_DIR}/plays_processed.parquet"
     pd.concat(all_plays).to_parquet(out_file)
 
-    print(f"✅ Dataset procesado guardado en: {out_file}")
+    print(f"✅ Dataset procesado guardado en: {out_file}", flush=True)
 
 
 if __name__ == "__main__":
