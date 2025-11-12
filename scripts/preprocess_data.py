@@ -136,11 +136,11 @@ def main():
 
         # Merge with supplementary metadata (game, EPA, etc.)
         merged = merged.merge(
-            supp,
-            on=["game_id", "play_id"],
-            how="left",
-            validate="many_to-one"
-        )
+        supp,
+        on=["game_id", "play_id"],
+        how="left",
+        validate="m:1"  # <-- ¡CAMBIO AQUÍ!
+    )
 
         # Group play
         for (g, p), play_df in merged.groupby(["game_id", "play_id"]):
