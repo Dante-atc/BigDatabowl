@@ -36,7 +36,7 @@ OUT_LOSS_PLOT = "/lustre/home/dante/compartido/models/train_loss.png"
 
 EPOCHS = 400
 BATCH_SIZE = 1024
-LR = 1e-4
+LR = 5e-5
 WEIGHT_DECAY = 1e-5
 HIDDEN_DIM = 512
 PROJ_DIM = 256
@@ -223,11 +223,21 @@ def info_nce_loss(z1, z2, tau=TEMPERATURE):
     # z1, z2: [B, D]
     z1 = F.normalize(z1, dim=1)
     z2 = F.normalize(z2, dim=1)
-    logits = (z1 @ z2.T) / tau  # [B, B]
+
+    logits = (z1 @ z2.T) / max(tau, 1e-6)
+    logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
+
     labels = torch.arange(z1.size(0), device=z1.device)
     loss1 = F.cross_entropy(logits, labels)
     loss2 = F.cross_entropy(logits.T, labels)
-    return 0.5 * (loss1 + loss2)
+    loss = 0.5 * (loss1 + loss2)
+
+    if not torch.isfinite(loss):
+        print("[WARN] NaN detected in InfoNCE, replacing with 0")
+        loss = torch.tensor(0.0, device=z1.device)
+
+    return loss
+
 
 def masked_recon_loss(pred, target, node_mask):
     # pred: [N, F], target: [N, F], node_mask: boolean [N] selects nodes to compute loss
@@ -267,7 +277,8 @@ optimizer = torch.optim.Adam(
 
 
 def train_loop(encoder, proj_head, recon_head, dataloader,
-               optimizer, scaler, epochs=EPOCHS, device=device):
+               optimizer, scaler, scheduler=None, epochs=EPOCHS, device=device):
+
     encoder.train()
     proj_head.train()
     recon_head.train()
@@ -341,6 +352,10 @@ def train_loop(encoder, proj_head, recon_head, dataloader,
                 loss_contrast = info_nce_loss(z1_list, z2_list)
                 loss_total = loss_contrast + 0.5 * recon_losses
 
+            if not torch.isfinite(loss_total):
+                print(f"[WARN] NaN detected at epoch {epoch}, skipping batch")
+                continue
+
             scaler.scale(loss_total).backward()
             # gradient clipping (unscale first)
             scaler.unscale_(optimizer)
@@ -363,6 +378,10 @@ def train_loop(encoder, proj_head, recon_head, dataloader,
             os.makedirs(os.path.dirname(OUT_BACKBONE), exist_ok=True)
             torch.save(encoder.state_dict(), OUT_BACKBONE + f".ckpt_epoch{epoch}")
             print(f"[INFO] checkpoint saved: {OUT_BACKBONE}.ckpt_epoch{epoch}")
+
+        # scheduler step (actualiza el learning rate)
+        if 'scheduler' in locals():
+            scheduler.step()
 
     # final save
     os.makedirs(os.path.dirname(OUT_BACKBONE), exist_ok=True)
@@ -400,11 +419,24 @@ def main():
     params = list(encoder.parameters()) + list(proj_head.parameters()) + list(recon_head.parameters())
     optimizer = torch.optim.AdamW(params, lr=LR, weight_decay=WEIGHT_DECAY)
 
+    # ✅ nuevo: scheduler suave para estabilizar el entrenamiento
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=EPOCHS,
+        eta_min=1e-6
+    )
+
     scaler = GradScaler()
 
     print("[INFO] Starting training...")
-    losses = train_loop(encoder, proj_head, recon_head, dataloader, optimizer, scaler, epochs=EPOCHS, device=device)
+    losses = train_loop(
+        encoder, proj_head, recon_head,
+        dataloader, optimizer, scaler,
+        scheduler=scheduler,   # ✅ pasa el scheduler
+        epochs=EPOCHS, device=device
+    )
     print("[INFO] Training finished.")
+
 
 if __name__ == "__main__":
     main()
