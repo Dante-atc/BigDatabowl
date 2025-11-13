@@ -7,6 +7,8 @@ Requiere:
  - train_ssl.py (por el modelo DynamicEncoder)
  - dataset_dynamic.py (por dataloader y build_graphs_from_batch)
 """
+import sys
+sys.path.append("/lustre/home/dante/BigDataBowl/src")
 
 import os
 import torch

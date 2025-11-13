@@ -9,9 +9,14 @@
 
 echo "--- Iniciando extracción de embeddings ---"
 date
+
 module load rocm/6.2.3
-source /lustre/proyectos/p037/env_bdb/bin/activate
-cd /lustre/home/dante/BigDataBowl
-python extract_embeddings.py
+
+PYTHON_EXEC=/lustre/proyectos/p037/env_bdb/bin/python3.9
+
+cd /lustre/home/dante/BigDataBowl/src
+
+$PYTHON_EXEC extract_embeddings.py
+
 echo "--- Extracción completada ---"
 date
