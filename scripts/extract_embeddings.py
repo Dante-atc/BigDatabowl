@@ -15,7 +15,7 @@ from tqdm import tqdm
 from torch_geometric.data import Data
 
 # 🔧 Configuración
-BACKBONE_PATH = "/lustre/home/dante/compartido/models/backbone_ssl.pth.ckpt_epoch50"
+BACKBONE_PATH = "/lustre/home/dante/compartido/models/backbone_ssl_final.pth"
 OUTPUT_PATH = "/lustre/home/dante/compartido/embeddings/embeddings_playlevel.parquet"
 
 # Asegurar carpeta
