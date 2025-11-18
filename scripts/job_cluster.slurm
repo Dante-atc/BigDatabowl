@@ -11,22 +11,23 @@
 echo "--- Iniciando cluster ensemble ---"
 date
 
-# 1. Cargar ROCm
+# 1. ROCm
 module load rocm/6.2.3
 
-# 2. Activar tu entorno (usamos python3.9 del env_bdb directamente)
-export PATH="/lustre/proyectos/p037/env_bdb/bin:$PATH"
-export LD_LIBRARY_PATH="/lustre/proyectos/p037/env_bdb/lib:$LD_LIBRARY_PATH"
+# 2. Activar entorno correctamente
+export PYTHON_BIN="/lustre/proyectos/p037/env_bdb/bin/python"
 export PYTHONPATH="/lustre/home/dante/BigDataBowl/src:$PYTHONPATH"
+export LD_LIBRARY_PATH="/lustre/proyectos/p037/env_bdb/lib:$LD_LIBRARY_PATH"
 
-which python
-python --version
+echo "Python que se usará:"
+echo $PYTHON_BIN
+$PYTHON_BIN --version
 
 # 3. Ir al proyecto
 cd /lustre/home/dante/BigDataBowl/src
 
-# 4. Ejecutar el script de clustering
-python cluster_embeddings.py
+# 4. Ejecutar script
+$PYTHON_BIN cluster_embeddings.py
 
 echo "--- Cluster ensemble completado ---"
 date
