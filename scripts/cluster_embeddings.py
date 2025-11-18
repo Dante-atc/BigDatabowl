@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+##!/usr/bin/env python
 # coding: utf-8
 
 """
@@ -116,7 +116,6 @@ def bootstrap_ari(labels):
 #############################################
 
 results = []
-all_centroids = {}
 
 print("[INFO] Ejecutando K-Means + GMM para múltiples K...")
 for K in K_LIST:
@@ -156,8 +155,9 @@ for K in K_LIST:
 
 print("[INFO] Ejecutando HDBSCAN...")
 h_labels, h_probs = run_hdbscan()
-np.save(os.path.join(OUT_DIR, "HDBSCAN", "labels.npy"), h_labels)
-np.save(os.path.join(OUT_DIR, "HDBSCAN", "probs.npy"), h_probs)
+os.makedirs(os.path.join(OUT_DIR, "HDBSCAN"), exist_ok=True)
+np.save(os.path.join(OUT_DIR, "HDBSCAN/labels.npy"), h_labels)
+np.save(os.path.join(OUT_DIR, "HDBSCAN/probs.npy"), h_probs)
 
 sil_h = silhouette_score(Xembed, h_labels[h_labels >= 0])
 stab_h = bootstrap_ari(h_labels[h_labels >= 0])
@@ -174,7 +174,7 @@ results.append({
 #############################################
 
 dfres = pd.DataFrame(results)
-dfres["score"] = dfres["silhouette"] + dfres["stability"] * 2.0  # prioridad a estabilidad
+dfres["score"] = dfres["silhouette"] + dfres["stability"] * 2.0
 
 best = dfres.sort_values("score", ascending=False).iloc[0]
 print("\n=== MEJOR CONFIGURACIÓN ===")
@@ -192,7 +192,6 @@ if best_method == "kmeans":
 elif best_method == "gmm":
     centroids = np.load(os.path.join(OUT_DIR, f"GMM/K{best_K}/means.npy"))
 else:
-    # HDBSCAN normaliza centroides tomando promedio de puntos por cluster
     labels = np.load(os.path.join(OUT_DIR, "HDBSCAN/labels.npy"))
     centroids = np.vstack([
         Xembed[labels == cid].mean(axis=0)
@@ -213,5 +212,5 @@ df_cent.to_parquet(out_path, index=False)
 with open(os.path.join(final_dir, "metadata.json"), "w") as f:
     json.dump(best.to_dict(), f, indent=4)
 
-print("\n Plantillas A_ideal guardadas en:")
+print("\nPlantillas A_ideal guardadas en:")
 print(out_path)
