@@ -41,16 +41,16 @@ N_BOOTSTRAPS = 20
 # LOAD DATA
 #############################################
 
-print("[INFO] Cargando embeddings...")
+print("[INFO] Loading embeddings...")
 df = pd.read_parquet(INPUT_PATH)
 embed_cols = [c for c in df.columns if "dim_" in c]
 X = df[embed_cols].values
 
 #############################################
-# NORMALIZAR
+# NORMALIZE
 #############################################
 
-print("[INFO] Normalizando...")
+print("[INFO] Normalizing...")
 scaler = StandardScaler()
 Xn = scaler.fit_transform(X)
 
@@ -64,7 +64,7 @@ Xpca = pca.fit_transform(Xn)
 np.save(os.path.join(OUT_DIR, "PCA_embeddings.npy"), Xpca)
 
 #############################################
-# UMAP (opcional)
+# UMAP 
 #############################################
 
 try:
@@ -75,11 +75,11 @@ try:
     np.save(os.path.join(OUT_DIR, "UMAP_embeddings.npy"), Xumap)
     Xembed = Xumap
 except:
-    print("[WARN] UMAP no disponible, usando PCA 32 dims")
+    print("[WARN] UMAP not available, using PCA 32 dims")
     Xembed = Xpca
 
 #############################################
-# FUNCIONES DE CLUSTERING
+# CLUSTERING
 #############################################
 
 def run_kmeans(K):
@@ -112,12 +112,12 @@ def bootstrap_ari(labels):
     return float(np.mean(ari_scores))
 
 #############################################
-# EJECUCIÓN
+# EXECUTION
 #############################################
 
 results = []
 
-print("[INFO] Ejecutando K-Means + GMM para múltiples K...")
+print("[INFO] Executing K-Means + GMM for multiple Ks...")
 for K in K_LIST:
     km_labels, km_centroids = run_kmeans(K)
     gmm_labels, gmm_centroids = run_gmm(K)
@@ -153,7 +153,7 @@ for K in K_LIST:
         "stability": stability_gmm
     })
 
-print("[INFO] Ejecutando HDBSCAN...")
+print("[INFO] Executing HDBSCAN...")
 h_labels, h_probs = run_hdbscan()
 os.makedirs(os.path.join(OUT_DIR, "HDBSCAN"), exist_ok=True)
 np.save(os.path.join(OUT_DIR, "HDBSCAN/labels.npy"), h_labels)
@@ -170,14 +170,14 @@ results.append({
 })
 
 #############################################
-# SELECCIÓN DEL MEJOR MÉTODO
+# BEST METHOD SELECTION
 #############################################
 
 dfres = pd.DataFrame(results)
 dfres["score"] = dfres["silhouette"] + dfres["stability"] * 2.0
 
 best = dfres.sort_values("score", ascending=False).iloc[0]
-print("\n=== MEJOR CONFIGURACIÓN ===")
+print("\n=== BEST CONFIG ===")
 print(best)
 
 #############################################
@@ -212,5 +212,5 @@ df_cent.to_parquet(out_path, index=False)
 with open(os.path.join(final_dir, "metadata.json"), "w") as f:
     json.dump(best.to_dict(), f, indent=4)
 
-print("\nPlantillas A_ideal guardadas en:")
+print("\nA_ideal templates saved in:")
 print(out_path)

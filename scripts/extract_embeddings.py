@@ -2,10 +2,10 @@
 # coding: utf-8
 
 """
-Extrae embeddings de jugadas usando el backbone SSL entrenado.
-Requiere:
- - train_ssl.py (por el modelo DynamicEncoder)
- - dataset_dynamic.py (por dataloader y build_graphs_from_batch)
+Extracts play embeddings using SSL trained backbone.
+Needs:
+ - train_ssl.py (model DynamicEncoder)
+ - dataset_dynamic.py (dataloader and build_graphs_from_batch)
 """
 import sys
 sys.path.append("/lustre/home/dante/BigDataBowl/src")
@@ -16,25 +16,25 @@ import pandas as pd
 from tqdm import tqdm
 from torch_geometric.data import Data
 
-# 🔧 Configuración
+# Config
 BACKBONE_PATH = "/lustre/home/dante/compartido/models/backbone_ssl_final.pth"
 OUTPUT_PATH = "/lustre/home/dante/compartido/embeddings/embeddings_playlevel.parquet"
 
-# Asegurar carpeta
+# Make Dir if not existant
 os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
-# Cargar clases desde train_ssl.py
+# Load classes from train_ssl.py
 from train_ssl import DynamicEncoder, HIDDEN_DIM, build_graphs_from_batch, dataloader, device
 
-# 🔹 Cargar modelo
-print(f"[INFO] Cargando backbone desde {BACKBONE_PATH} ...")
+# Load Model
+print(f"[INFO] Loading backbone from {BACKBONE_PATH} ...")
 encoder = DynamicEncoder(in_dim=6, hidden_dim=HIDDEN_DIM).to(device)
 state = torch.load(BACKBONE_PATH, map_location=device)
 encoder.load_state_dict(state)
 encoder.eval()
-print("[INFO] Backbone cargado correctamente en modo eval.")
+print("[INFO] Backbone successfully loaded in eval mode.")
 
-# 🔹 Extraer embeddings por jugada
+# Extract embeddings per play
 embeddings = []
 play_ids = []
 
@@ -52,7 +52,7 @@ with torch.no_grad():
             play_ids.append(pid)
             embeddings.append(emb)
 
-# 🔹 Guardar resultados
+# Save results
 import numpy as np
 
 embeddings = np.stack(embeddings)
@@ -60,5 +60,5 @@ df = pd.DataFrame(embeddings, columns=[f"dim_{i}" for i in range(embeddings.shap
 df["play_id"] = play_ids
 
 df.to_parquet(OUTPUT_PATH, index=False)
-print(f"[✅] Embeddings guardados en: {OUTPUT_PATH}")
-print(f"[INFO] Total de jugadas procesadas: {len(df)}")
+print(f" Embeddings saved in: {OUTPUT_PATH}")
+print(f"[INFO] Total proccesed plays: {len(df)}")
