@@ -159,15 +159,25 @@ os.makedirs(os.path.join(OUT_DIR, "HDBSCAN"), exist_ok=True)
 np.save(os.path.join(OUT_DIR, "HDBSCAN/labels.npy"), h_labels)
 np.save(os.path.join(OUT_DIR, "HDBSCAN/probs.npy"), h_probs)
 
-sil_h = silhouette_score(Xembed, h_labels[h_labels >= 0])
-stab_h = bootstrap_ari(h_labels[h_labels >= 0])
 
-results.append({
-    "method": "hdbscan",
-    "K": len(np.unique(h_labels[h_labels >= 0])),
-    "silhouette": sil_h,
-    "stability": stab_h
-})
+valid_mask = h_labels >= 0
+num_valid = np.sum(valid_mask)
+num_clusters_h = len(np.unique(h_labels[valid_mask]))
+
+if num_valid > 100 and num_clusters_h > 1:
+    
+    sil_h = silhouette_score(Xembed[valid_mask], h_labels[valid_mask])
+    stab_h = bootstrap_ari(h_labels[valid_mask])
+    
+    results.append({
+        "method": "hdbscan",
+        "K": num_clusters_h,
+        "silhouette": sil_h,
+        "stability": stab_h
+    })
+else:
+    print(f"[WARN] HDBSCAN found only 1 cluster. Ignoring.")
+    
 
 #############################################
 # BEST METHOD SELECTION

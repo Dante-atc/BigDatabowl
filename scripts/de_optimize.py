@@ -19,13 +19,18 @@ Optimization Strategy:
     
     Hypothesis: High Defensive Score -> Low EPA (Strong Negative Correlation).
 
+CRITICAL UPDATE:
+    - Filters ground truth data to include ONLY Pass Plays (Dropbacks).
+    - Removes Run plays, Kneels, and Spikes to prevent noise in the optimization.
+
 Inputs:
-    - metrics_playlevel_baseline.parquet : Baseline geometric proxies (from Phase 4.2).
+    - metrics_playlevel_baseline.parquet : Baseline geometric proxies.
     - supplementary_data.csv             : Official BDB metadata (Ground Truth labels).
 
 Outputs:
     - metrics_playlevel_optimized.parquet : Final dataframe with calibrated DCI/DIS.
     - de_best_params.json                 : Optimal hyperparameters found.
+
 """
 
 import os
@@ -59,6 +64,7 @@ df = pd.read_parquet(INPUT_PATH)
 
 print(f"[DEBUG] Columns in baseline metrics: {df.columns.tolist()}")
 
+# Standardize column names (Handle inconsistencies between steps)
 rename_map = {
     "gameId": "game_id",
     "playId": "play_id",
@@ -67,6 +73,7 @@ rename_map = {
 }
 df.rename(columns=rename_map, inplace=True)
 
+# Validation
 if "game_id" not in df.columns:
     raise KeyError(f"CRITICAL: 'game_id' not found in dataframe. Columns are: {df.columns.tolist()}")
 
@@ -75,7 +82,7 @@ print(f"   -> Loaded {len(df)} plays from baseline metrics.")
 print(f"[INFO] Loading ground truth labels from: {SUPPLEMENTARY_PATH}")
 supp = pd.read_csv(SUPPLEMENTARY_PATH, low_memory=False)
 
-# Standardize column names (Handle inconsistencies between BDB datasets)
+# Standardize supplementary column names
 cols_map = {
     "gameId": "game_id", 
     "playId": "play_id", 
@@ -84,11 +91,28 @@ cols_map = {
 }
 supp.rename(columns=cols_map, inplace=True)
 
-# Ensure snake_case keys exist even if rename wasn't needed
+# Ensure snake_case keys exist
 if "expectedPointsAdded" in supp.columns and "expected_points_added" not in supp.columns:
      supp.rename(columns={"expectedPointsAdded": "expected_points_added"}, inplace=True)
 if "passResult" in supp.columns and "pass_result" not in supp.columns:
      supp.rename(columns={"passResult": "pass_result"}, inplace=True)
+
+
+# --- CRITICAL FIX: FILTER FOR PASS PLAYS ONLY ---
+# Run plays do not have a "coverage" structure in the same way. Including them introduces
+# massive noise because the metric will penalize defenders for breaking formation to tackle.
+# We filter for valid pass results: Complete (C), Incomplete (I), Sack (S), Interception (IN).
+
+print(f"[INFO] Filtering for PASS PLAYS only...")
+initial_len = len(supp)
+supp = supp.dropna(subset=['pass_result']) 
+
+valid_results = ['C', 'I', 'S', 'IN']
+supp = supp[supp['pass_result'].isin(valid_results)]
+
+print(f"   -> Retained {len(supp)} pass plays (Dropped {initial_len - len(supp)} non-pass plays).")
+# ------------------------------------------------
+
 
 # Filter required columns for optimization
 required_cols = ["game_id", "play_id", "expected_points_added", "pass_result"]
@@ -99,7 +123,7 @@ except KeyError as e:
     raise e
 
 # Merge: Combine calculated proxies with Ground Truth labels
-# Use inner join to ensure we only optimize on plays where we have valid labels
+# Use inner join to ensure we only optimize on plays where we have valid labels AND are pass plays
 print("[INFO] Merging metrics with ground truth labels...")
 df = df.merge(supp, on=["game_id", "play_id"], how="inner")
 
@@ -108,7 +132,6 @@ df = df.merge(supp, on=["game_id", "play_id"], how="inner")
 df["is_complete"] = df["pass_result"].apply(lambda x: 1 if x == 'C' else 0)
 
 # Extract numpy arrays for high-performance optimization
-# We use the raw calculated proxies, not the unoptimized base metrics
 raw_dist = df["distance_to_ideal"].values
 spacing = df["spacing_proxy"].values
 integrity = df["integrity_proxy"].values
@@ -131,7 +154,6 @@ def objective(params):
         params (list): [alpha, beta, gamma]
         
         alpha (float): Decay rate for Geometric Coverage (DCI).
-                       Higher alpha = Stricter geometric requirements.
         beta (float):  Weight for Spacing Cohesion in DIS.
         gamma (float): Weight for Tactic Integrity/Clarity in DIS.
 
@@ -160,9 +182,6 @@ def objective(params):
     # Goal: High Defensive Score should correlate with Low (Negative) EPA.
     corr_epa, _ = pearsonr(global_score, epa)
     
-    # Since DE minimizes the objective, and we want a strong NEGATIVE correlation (e.g., -0.6),
-    # returning the raw correlation works perfectly.
-    # -0.6 (Better) < -0.1 (Worse) < 0.5 (Terrible)
     return corr_epa
 
 # -------------------------------------------------------
@@ -170,13 +189,10 @@ def objective(params):
 # -------------------------------------------------------
 
 # Bounds for hyperparameters:
-# alpha: [0.1, 8.0] - Allows for very sharp geometric decay if needed.
-# beta:  [0.1, 5.0] - Relative importance of spacing.
-# gamma: [0.1, 5.0] - Relative importance of integrity.
 bounds = [
-    (0.1, 8.0),
-    (0.1, 5.0),
-    (0.1, 5.0),
+    (0.1, 8.0),   # alpha
+    (0.1, 5.0),   # beta
+    (0.1, 5.0),   # gamma
 ]
 
 def first_to_best_mutation(pop, scores, mutation=0.8, recomb=0.7):
@@ -208,7 +224,7 @@ def first_to_best_mutation(pop, scores, mutation=0.8, recomb=0.7):
 
             trial_score = objective(trial)
 
-            # Greedy selection: if trial improves score, accept immediately
+            # Greedy selection
             if trial_score < scores[i]:
                 new_pop[i] = trial
                 scores[i] = trial_score
@@ -308,6 +324,6 @@ if __name__ == "__main__":
             "epa_correlation": float(best_score)
         }, f, indent=4)
 
-    print("\n Optimization Phase Completed Successfully.")
+    print("\n   Optimization Phase Completed Successfully.")
     print(f"    Optimized metrics saved to: {OUT_PATH}")
     print(f"    Best parameters saved to:   {PARAM_PATH}")
