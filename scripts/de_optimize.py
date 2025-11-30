@@ -56,6 +56,20 @@ PARAM_PATH = "/lustre/home/dante/compartido/metrics/de_best_params.json"
 
 print("[INFO] Loading baseline metrics...")
 df = pd.read_parquet(INPUT_PATH)
+
+print(f"[DEBUG] Columns in baseline metrics: {df.columns.tolist()}")
+
+rename_map = {
+    "gameId": "game_id",
+    "playId": "play_id",
+    "frameId": "frame_id",
+    "nflId": "nfl_id"
+}
+df.rename(columns=rename_map, inplace=True)
+
+if "game_id" not in df.columns:
+    raise KeyError(f"CRITICAL: 'game_id' not found in dataframe. Columns are: {df.columns.tolist()}")
+
 print(f"   -> Loaded {len(df)} plays from baseline metrics.")
 
 print(f"[INFO] Loading ground truth labels from: {SUPPLEMENTARY_PATH}")
