@@ -32,8 +32,8 @@ gap = group.loc['C', 'distance_to_ideal'] - group.loc['I', 'distance_to_ideal']
 print(f"\nGAP (Completo - Incompleto): {gap:.4f}")
 
 if gap > 0:
-    print("✅ ¡SEÑAL DETECTADA! Las coberturas malas (lejanas) permiten más pases completos.")
+    print(" ¡SEÑAL DETECTADA! Las coberturas malas (lejanas) permiten más pases completos.")
     print("   El optimizador podrá explotar esto.")
 else:
-    print("⚠️ ALERTA ROJA: Las coberturas 'buenas' (cercanas) están permitiendo pases.")
+    print(" ALERTA ROJA: Las coberturas 'buenas' (cercanas) están permitiendo pases.")
     print("   Necesitamos repensar qué significa 'Ideal'.")
