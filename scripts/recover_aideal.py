@@ -4,9 +4,9 @@
 """
 RECOVERY SCRIPT
 ===============
-Este script repara la ejecución incompleta de cluster_embeddings.py.
-Toma los labels/centroides ya generados, evalúa cuál es el mejor
-y genera la carpeta 'final' con A_ideal_best.parquet.
+This script repairs the incomplete execution of cluster_embeddings.py.
+It takes the already generated labels/centroids, evaluates which is the best,
+and generates the 'final' folder with A_ideal_best.parquet.
 """
 
 import os
@@ -16,14 +16,14 @@ import pandas as pd
 from sklearn.metrics import silhouette_score, adjusted_rand_score
 
 # -------------------------------------------------------
-# CONFIG (Mismas rutas que tu script original)
+# CONFIG (Same paths as your original script)
 # -------------------------------------------------------
 CLUSTERS_DIR = "/lustre/home/dante/compartido/clusters/"
 K_LIST = [8, 12, 16, 20, 24, 32, 40]
 N_BOOTSTRAPS = 20
 
 # -------------------------------------------------------
-# LOAD EMBEDDINGS (Necesarios para calcular Silhouette)
+# LOAD EMBEDDINGS (Required to calculate Silhouette)
 # -------------------------------------------------------
 print("[INFO] Loading pre-calculated embeddings...")
 umap_path = os.path.join(CLUSTERS_DIR, "UMAP_embeddings.npy")
@@ -36,20 +36,20 @@ elif os.path.exists(pca_path):
     print("   -> Found PCA embeddings (UMAP missing).")
     Xembed = np.load(pca_path)
 else:
-    raise FileNotFoundError("No se encontraron embeddings (UMAP o PCA) en la carpeta clusters.")
+    raise FileNotFoundError("No embeddings (UMAP or PCA) found in the clusters folder.")
 
 # -------------------------------------------------------
 # HELPER: BOOTSTRAP STABILITY
 # -------------------------------------------------------
 def bootstrap_ari(labels):
-    # Si hay ruido (-1), lo ignoramos para estabilidad o lo tratamos como cluster
+    # If there is noise (-1), ignore it for stability or treat it as a cluster
     valid_mask = labels != -1
     if valid_mask.sum() < len(labels) * 0.5:
-        return 0.0 # Demasiado ruido
+        return 0.0  # Too much noise
     
     ari_scores = []
     n = len(labels)
-    # Hacemos menos bootstraps para que el recovery sea rápido
+    # Perform fewer bootstraps so recovery is fast
     for _ in range(10): 
         idx = np.random.choice(n, n, replace=True)
         ari = adjusted_rand_score(labels[idx], labels)
@@ -94,7 +94,7 @@ h_path = os.path.join(CLUSTERS_DIR, "HDBSCAN")
 if os.path.exists(h_path):
     try:
         labels = np.load(os.path.join(h_path, "labels.npy"))
-        # Filtrar ruido (-1) para silhouette
+        # Filter noise (-1) for silhouette
         valid = labels != -1
         if valid.sum() > 100:
             sil = silhouette_score(Xembed[valid], labels[valid])
@@ -109,7 +109,7 @@ if os.path.exists(h_path):
 # SELECT BEST & EXPORT
 # -------------------------------------------------------
 if not results:
-    raise RuntimeError("No se pudieron cargar resultados previos. ¿Están vacías las carpetas?")
+    raise RuntimeError("Could not load previous results. Are the folders empty?")
 
 dfres = pd.DataFrame(results)
 best = dfres.sort_values("score", ascending=False).iloc[0]
@@ -120,7 +120,7 @@ print(best)
 best_method = best["method"]
 best_K = int(best["K"])
 
-# Cargar centroides del ganador
+# Load centroids of the winner
 centroids = None
 
 if best_method == "kmeans":
@@ -129,11 +129,11 @@ elif best_method == "gmm":
     centroids = np.load(os.path.join(CLUSTERS_DIR, f"GMM/K{best_K}/means.npy"))
 elif best_method == "hdbscan":
     labels = np.load(os.path.join(CLUSTERS_DIR, "HDBSCAN/labels.npy"))
-    # Recalcular centroides para HDBSCAN
+    # Recalculate centroids for HDBSCAN
     unique_labels = [c for c in np.unique(labels) if c >= 0]
     centroids = np.vstack([Xembed[labels == cid].mean(axis=0) for cid in unique_labels])
 
-# Guardar
+# Save
 df_cent = pd.DataFrame(centroids, columns=[f"dim_{i}" for i in range(centroids.shape[1])])
 df_cent["cluster_id"] = range(len(df_cent))
 df_cent["method"] = best_method
@@ -148,5 +148,5 @@ df_cent.to_parquet(out_path, index=False)
 with open(os.path.join(final_dir, "metadata_recovered.json"), "w") as f:
     json.dump(best.to_dict(), f, indent=4)
 
-print("\n✅ RECOVERY COMPLETE.")
+print("\n RECOVERY COMPLETE.")
 print(f"A_ideal generated at: {out_path}")
