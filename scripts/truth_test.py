@@ -1,39 +1,39 @@
 import pandas as pd
 import numpy as np
 
-# Rutas
+# Paths
 METRICS_PATH = "/lustre/home/dante/compartido/metrics/metrics_playlevel_baseline.parquet"
 SUPP_PATH = "/lustre/proyectos/p037/datasets/raw/114239_nfl_competition_files_published_analytics_final/supplementary_data.csv"
 
 df = pd.read_parquet(METRICS_PATH)
 supp = pd.read_csv(SUPP_PATH, low_memory=False)
 
-# Normalizar y Merge
+# Normalize and Merge
 supp.rename(columns={"gameId": "game_id", "playId": "play_id", "passResult": "pass_result"}, inplace=True)
 merged = df.merge(supp, on=["game_id", "play_id"], how="inner")
 
-# FILTRO ESTRICTO: Solo Pases Claros
+# STRICT FILTER: Clear Passes Only
 merged = merged[merged['pass_result'].isin(['C', 'I', 'IN', 'S'])]
 
-print(f"Analizando {len(merged)} pases puros...")
+print(f"Analyzing {len(merged)} pure passes...")
 
-# --- LA PRUEBA DE FUEGO ---
-# Agrupamos por resultado.
-# HIPÓTESIS:
-# - Pases Completos (C) deberían tener MAYOR distancia al ideal (peor cobertura).
-# - Pases Incompletos (I) deberían tener MENOR distancia al ideal (mejor cobertura).
+# --- THE LITMUS TEST ---
+# Group by result.
+# HYPOTHESIS:
+# - Complete Passes (C) should have HIGHER distance to ideal (worse coverage).
+# - Incomplete Passes (I) should have LOWER distance to ideal (better coverage).
 
 group = merged.groupby('pass_result')[['distance_to_ideal', 'spacing_proxy', 'integrity_proxy']].mean()
-print("\n--- PROMEDIOS POR RESULTADO ---")
+print("\n--- AVERAGES BY RESULT ---")
 print(group)
 
-# Calculamos el "Gap" (Diferencia)
+# Calculate the "Gap" (Difference)
 gap = group.loc['C', 'distance_to_ideal'] - group.loc['I', 'distance_to_ideal']
-print(f"\nGAP (Completo - Incompleto): {gap:.4f}")
+print(f"\nGAP (Complete - Incomplete): {gap:.4f}")
 
 if gap > 0:
-    print(" ¡SEÑAL DETECTADA! Las coberturas malas (lejanas) permiten más pases completos.")
-    print("   El optimizador podrá explotar esto.")
+    print(" SIGNAL DETECTED! Bad coverages (distant) allow more complete passes.")
+    print("    The optimizer will be able to exploit this.")
 else:
-    print(" ALERTA ROJA: Las coberturas 'buenas' (cercanas) están permitiendo pases.")
-    print("   Necesitamos repensar qué significa 'Ideal'.")
+    print(" RED ALERT: 'Good' coverages (close) are allowing passes.")
+    print("    We need to rethink what 'Ideal' means.")
