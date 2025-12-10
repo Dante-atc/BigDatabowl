@@ -9,11 +9,6 @@
 # REQUIREMENTS:
 #   - Must be run within an active SLURM allocation (salloc/sbatch).
 #   - Python environment must exist at the defined JUPYTER_EXEC path.
-#
-# USAGE:
-#   1. ./jupyter_gpu_start.sh
-#   2. Run the generated SSH command on your LOCAL machine.
-#   3. Open the generated URL in your local browser.
 # ==============================================================================
 
 # --- Configuration ---
