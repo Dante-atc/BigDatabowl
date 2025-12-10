@@ -2,20 +2,29 @@
 # -*- coding: utf-8 -*-
 
 """
-Phase 6 — Animation Data Generator (Frame-by-Frame Inference)
-=============================================================
+ANIMATION DATA GENERATOR (Phase 6)
+==================================
 
-This script processes a specific play frame-by-frame to generate the data
-required for visualization and video rendering.
+SUMMARY
+-------
+This script processes a single specific play frame-by-frame to generate the 
+detailed data required for video rendering and visualization. 
 
-Key Features:
-1.  **Global Metrics:** Computes the 'Instant DCI' (Defensive Coverage Index) per frame.
-2.  **Node-Level Heatmap:** Computes 'Node Stress' for each defender to visualize 
-    structural breaks (where the integrity is failing).
+It performs two key tasks:
+1.  **Inference:** Runs the graph neural network to validate the play structure.
+2.  **Stress Calculation:** Computes "Node Stress" (Defensive Isolation) for 
+    each player to visualize structural breaks in the coverage.
 
-Output:
-    - animation_{gameId}_{playId}.csv : Detailed frame-level data for plotting.
+OUTPUT
+------
+A CSV file (animation_{gameId}_{playId}.csv) containing frame-level tracking 
+data enriched with 'node_stress' metrics, ready for plotting (e.g., via Matplotlib/Plotly).
 
+FUNCTIONS
+---------
+- calculate_node_stress: Computes a heuristic metric for player isolation.
+- main: Loads the model and tracking data, filters for the target play, 
+        and generates the frame-by-frame export.
 """
 
 import torch
@@ -52,7 +61,17 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def calculate_node_stress(player_pos, teammate_pos):
     """
     Calculates the 'Stress' of a node based on local isolation.
-    High Stress = Player is far from teammates (Potential structural break).
+    
+    Logic:
+    High Stress = Player is physically far from teammates (Potential structural break).
+    This is often visualized as a 'Hot' color on the heatmap.
+    
+    Args:
+        player_pos (np.array): [x, y] coordinates of the target player.
+        teammate_pos (np.array): [[x, y], ...] coordinates of all teammates.
+        
+    Returns:
+        float: A normalized stress score between 0.0 and 1.0.
     """
     if len(teammate_pos) == 0:
         return 0.0
@@ -61,10 +80,10 @@ def calculate_node_stress(player_pos, teammate_pos):
     dists = np.linalg.norm(teammate_pos - player_pos, axis=1)
     
     # We take the distance to the nearest neighbor as the primary stress factor
-    # (If my closest help is far away, I am stressed).
+    # (If my closest help is far away, I am stressed/isolated).
     nearest_dist = np.min(dists)
     
-    # Normalize simply for visualization (e.g., > 10 yards is high stress)
+    # Normalize simply for visualization (e.g., > 10 yards is max stress)
     stress_score = np.clip(nearest_dist / 10.0, 0.0, 1.0)
     return stress_score
 
@@ -81,9 +100,10 @@ def main():
     
     try:
         state = torch.load(MODEL_PATH, map_location=DEVICE)
-        # Handle 'encoder.' prefix if present
+        # Handle 'encoder.' prefix if present (common in Lightning/DDP saves)
         new_state = {k.replace("encoder.", ""): v for k, v in state.items() if "encoder." in k}
-        if not new_state: new_state = state
+        if not new_state: 
+            new_state = state
         encoder.load_state_dict(new_state, strict=False)
     except Exception as e:
         print(f"[ERROR] Model loading failed: {e}")
@@ -93,14 +113,15 @@ def main():
 
     # 2. Load Raw Tracking Data
     print("[INFO] Loading and filtering raw play data...")
-    # Reading full parquet might be slow, optimize if needed
+    # Reading full parquet might be slow; consider using libraries like DuckDB 
+    # if you only need one specific row, but Pandas is fine for < 5GB.
     full_df = pd.read_parquet(RAW_DATA, filters=[
         ('game_id', '==', TARGET_GAME_ID),
         ('play_id', '==', TARGET_PLAY_ID)
     ])
     
     if full_df.empty:
-        print(" Play not found in dataset.")
+        print("    [WARN] Play not found in dataset.")
         return
 
     # Sort by frame
@@ -116,7 +137,8 @@ def main():
             
             # --- PREPARE TENSORS ---
             feat_cols = ["x", "y", "s", "a", "o", "dir"]
-            # Sanitize inputs
+            
+            # Sanitize inputs (NaN -> 0.0)
             x_np = np.nan_to_num(df_f[feat_cols].values.astype(np.float32))
             x_tensor = torch.tensor(x_np)
             
@@ -129,32 +151,22 @@ def main():
             edge_type = torch.zeros(edge_index.size(1), dtype=torch.long, device=DEVICE)
             
             # --- MODEL INFERENCE (Global Context) ---
-            # We run the model to get the latent representation of the frame
+            # We run the model to ensure the graph is valid and potentially 
+            # to extract latent features if needed for advanced coloring.
             data = Data(x=x_tensor, edge_index=edge_index).to(DEVICE)
-            node_embs = encoder(data.x, data.edge_index, edge_type, None)
+            _ = encoder(data.x, data.edge_index, edge_type, None)
             
-            # Note: For the animation CSV, we mostly need the raw positions 
-            # and the calculated per-node stress. The global DCI curve 
-            # can be smoothed from the 'metrics_playlevel_supervised.parquet' later.
-
             # --- NODE-LEVEL HEATMAP CALCULATION ---
-            # Identify defensive players
-            # Assuming 'player_side' column exists. If not, use position logic.
-            # Here we assume column 'player_side' == 'defense' (check your data schema)
-            
-            # If 'player_side' is missing in processed data, we infer from file context
-            # or skip specific side logic for generic heatmap.
-            
-            # Compute Stress for each player
-            # We iterate rows to keep mapping correct
+            # 
+            # We calculate 'stress' to determine the color intensity of each player node in the final video.
+
+            # We iterate rows to map stress back to specific players
             coords = df_f[['x', 'y']].values
             
             for idx, (i, row) in enumerate(df_f.iterrows()):
                 
                 # Identify if Defense (Logic depends on your schema)
-                # If you have 'player_side', use it. Otherwise, calculate for all.
-                is_defense = True 
-                
+                # If 'player_side' column exists, use it. Otherwise, assume visualization handles it.
                 current_pos = coords[idx]
                 other_pos = np.delete(coords, idx, axis=0)
                 
@@ -180,7 +192,7 @@ def main():
     df_out.to_csv(OUT_CSV, index=False)
     
     print(f" Animation data saved: {OUT_CSV}")
-    print("   Use 'node_stress' column to color-code the DIS heatmap.")
+    print("    Use the 'node_stress' column to color-code the player nodes (Red = High Stress).")
 
 if __name__ == "__main__":
     main()
