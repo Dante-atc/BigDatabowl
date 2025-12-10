@@ -1,7 +1,17 @@
 #!/bin/bash
+
+# ==============================================================================
+# SCRIPT: job_de_optimize.slurm
+# DESCRIPTION:
+#   Submits a long-running job for Differential Evolution (DE) Optimization.
+#   Allocates high CPU resources (16 cores) for parallel population evaluation.
+# ==============================================================================
+
+# --- SLURM Job Configuration ---
 #SBATCH --job-name=de_optimize
 #SBATCH --output=/lustre/home/dante/BigDataBowl/slurm_outputs/de_opt_%j.out
 #SBATCH --error=/lustre/home/dante/BigDataBowl/slurm_outputs/de_opt_%j.err
+
 #SBATCH --partition=gpu
 #SBATCH --cpus-per-task=16
 #SBATCH --time=20:00:00
@@ -16,20 +26,21 @@ date
 
 export PATH="/lustre/proyectos/p037/env_bdb/bin:$PATH"
 export LD_LIBRARY_PATH="/lustre/proyectos/p037/env_bdb/lib:$LD_LIBRARY_PATH"
-# Agregamos PYTHONPATH por seguridad
+
+# Add PYTHONPATH to ensure local modules in 'src' are importable
 export PYTHONPATH="/lustre/home/dante/BigDataBowl/src:$PYTHONPATH"
 
-echo "Python version:"
+echo "Python version in use:"
 which python
 python --version
 
 # ---------------------------------------------------------
-# 2. Go to project directory
+# 2. Navigate to Project Directory
 # ---------------------------------------------------------
 cd /lustre/home/dante/BigDataBowl/src
 
 # ---------------------------------------------------------
-# 3. Run DE optimization script
+# 3. Run DE Optimization Script
 # ---------------------------------------------------------
 python de_optimize.py
 
