@@ -2,32 +2,26 @@
 # coding: utf-8
 
 """
-EMBEDDING EXTRACTION (SSL BACKBONE)
-===================================
+Phase 2 — Embedding Extraction
+==============================
 
-SUMMARY
--------
-This script executes the inference phase using the pre-trained Self-Supervised 
-Learning (SSL) backbone. It processes the dataset in batches, converts raw 
-tracking data into graph structures, and extracts a fixed-size embedding vector 
-for each play.
+This module utilizes the Self-Supervised Learning (SSL) backbone trained in Phase 1
+to transform raw player tracking data into dense vector representations (embeddings).
 
-This is the primary feature extraction step before clustering.
+Process:
+    1. Loads the pre-trained 'DynamicEncoder' model weights.
+    2. Iterates through the play dataset using the dynamic graph builder.
+    3. Extracts the latent feature vector (embedding) for each play.
+    4. Exports the embeddings to a Parquet file for downstream tasks.
 
-DEPENDENCIES
-------------
-- train_ssl.py: Contains the model architecture (DynamicEncoder).
-- dataset_dynamic.py: Contains the dataloader and graph construction logic.
-
-OUTPUT
-------
-A Parquet file containing the play_id and the high-dimensional embedding vector
-for every play.
+Dependencies:
+    - train_ssl.py: Model architecture definition.
+    - dataset_dynamic.py: Data loading and graph construction logic.
 """
 
 import sys
-# Add source directory to path to allow importing local modules
-sys.path.append("/lustre/home/dante/BigDataBowl/src")
+# Adjust path to include local source modules if necessary
+sys.path.append(os.getcwd())
 
 import os
 import torch
@@ -36,87 +30,94 @@ import pandas as pd
 from tqdm import tqdm
 from torch_geometric.data import Data
 
-# -------------------------------------------------------
+# -----------------------------------------------------------
 # CONFIGURATION
-# -------------------------------------------------------
-BACKBONE_PATH = "/lustre/home/dante/compartido/models/backbone_ssl_final.pth"
+# -----------------------------------------------------------
+
+BACKBONE_PATH = "/lustre/home/dante/compartido/models/backbone_ssl.pth"
 OUTPUT_PATH = "/lustre/home/dante/compartido/embeddings/embeddings_playlevel.parquet"
 
-# Create output directory if it does not exist
+# Ensure output directory exists
 os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
-# Load classes from train_ssl.py
-# (Ensure these files are in the python path)
-from train_ssl import DynamicEncoder, HIDDEN_DIM, build_graphs_from_batch, dataloader, device
+# Import Architecture & Data Helpers
+try:
+    from train_ssl import DynamicEncoder, HIDDEN_DIM, build_graphs_from_batch, dataloader, device
+except ImportError as e:
+    raise ImportError("Could not import modules from train_ssl.py. Check your python path.") from e
 
-# -------------------------------------------------------
-# MAIN EXECUTION
-# -------------------------------------------------------
 
-def main():
-    # 1. Load Model
-    print(f"[INFO] Loading backbone from {BACKBONE_PATH} ...")
-    
-    # Initialize architecture
-    # in_dim=6 corresponds to [x, y, s, a, o, dir]
-    encoder = DynamicEncoder(in_dim=6, hidden_dim=HIDDEN_DIM).to(device)
-    
-    # Load weights
-    try:
-        state = torch.load(BACKBONE_PATH, map_location=device)
-        encoder.load_state_dict(state)
-        encoder.eval()
-        print("[INFO] Backbone successfully loaded in eval mode.")
-    except Exception as e:
-        print(f"[ERROR] Failed to load model weights: {e}")
-        return
+# -----------------------------------------------------------
+# MODEL LOADING
+# -----------------------------------------------------------
 
-    # 2. Extract embeddings per play
-    embeddings = []
-    play_ids = []
+print(f"[INFO] Loading backbone model from: {BACKBONE_PATH}")
+encoder = DynamicEncoder(in_dim=6, hidden_dim=HIDDEN_DIM).to(device)
 
-    print(f"[INFO] Starting inference on device: {device}")
+if os.path.exists(BACKBONE_PATH):
+    state = torch.load(BACKBONE_PATH, map_location=device)
+    encoder.load_state_dict(state)
+    encoder.eval()
+    print("[INFO] Backbone successfully loaded in EVAL mode.")
+else:
+    raise FileNotFoundError(f"Model checkpoint not found at {BACKBONE_PATH}")
 
-    with torch.no_grad():
-        # Iterate through the dataloader (which yields batches of play data)
-        for batch in tqdm(dataloader, desc="Extracting embeddings", ncols=100):
-            X_t_batch, X_tp1_batch = batch
+
+# -----------------------------------------------------------
+# EXTRACTION LOOP
+# -----------------------------------------------------------
+
+embeddings = []
+play_ids = []
+
+print("[INFO] Starting embedding extraction...")
+
+with torch.no_grad():
+    # Loop over the dataloader
+    for batch in tqdm(dataloader, desc="Extracting embeddings", ncols=100):
+        # Skip invalid batches (filtered by collate_fn)
+        if batch[0] is None:
+            continue
             
-            # Convert raw batch tensors into Graph objects
-            graphs_t = build_graphs_from_batch(X_t_batch)
+        X_t_batch, X_tp1_batch = batch
+        
+        # Build graph representations from raw tensors
+        graphs_t = build_graphs_from_batch(X_t_batch)
 
-            for g in graphs_t:
-                g = g.to(device)
-                
-                # Forward pass through the encoder
-                # h dimensions: [num_nodes, hidden_dim]
-                h = encoder(g.x, g.edge_index, getattr(g, "edge_type", None), None)
-                
-                # Pooling: Average all node embeddings to get one Play Embedding
-                emb = h.mean(dim=0).detach().cpu().numpy()
+        for g in graphs_t:
+            g = g.to(device)
+            
+            # Forward pass to get node embeddings
+            # We assume edge_type is handled inside the model or graph builder
+            h = encoder(g.x, g.edge_index, getattr(g, "edge_type", None), None)
+            
+            # Mean Pooling: Aggregating node features to get a single vector per play
+            emb = h.mean(dim=0).detach().cpu().numpy()
 
-                # Retrieve metadata (play_id) attached to the graph object
-                pid = getattr(g, "play_id", None)
-                
-                play_ids.append(pid)
-                embeddings.append(emb)
+            # Metadata extraction
+            pid = getattr(g, "play_id", None)
+            
+            play_ids.append(pid)
+            embeddings.append(emb)
 
-    # 3. Save results
-    print("[INFO] Stacking results...")
-    embeddings_np = np.stack(embeddings)
-    
-    df = pd.DataFrame(embeddings_np, columns=[f"dim_{i}" for i in range(embeddings_np.shape[1])])
+
+# -----------------------------------------------------------
+# EXPORT results
+# -----------------------------------------------------------
+
+if len(embeddings) == 0:
+    print("[WARN] No embeddings were extracted. Check your dataset path.")
+else:
+    embeddings = np.stack(embeddings)
+
+    # Create DataFrame with named dimensions
+    cols = [f"dim_{i}" for i in range(embeddings.shape[1])]
+    df = pd.DataFrame(embeddings, columns=cols)
     df["play_id"] = play_ids
 
-    # Reorder columns to have play_id first (optional, for readability)
-    cols = ["play_id"] + [c for c in df.columns if c != "play_id"]
-    df = df[cols]
-
-    print(f"[INFO] Saving to {OUTPUT_PATH}...")
+    # Save to Parquet
     df.to_parquet(OUTPUT_PATH, index=False)
-    
-    print(f"[INFO] Embeddings saved successfully.")
-    print(f"[INFO] Total processed plays: {len(df)}")
 
-if __name__ == "__main__":
-    main()
+    print(f"\n[INFO] Extraction complete.")
+    print(f"       Total processed plays: {len(df)}")
+    print(f"       Embeddings saved to:   {OUTPUT_PATH}")
