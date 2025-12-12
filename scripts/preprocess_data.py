@@ -112,6 +112,14 @@ def compress_play(df):
 def main():
     print("[INFO] Loading supplementary metadata...", flush=True)
     supp = pd.read_csv(SUPPLEMENTARY, low_memory=False)
+    
+    # Standardize column names (camelCase -> snake_case) for pipeline consistency
+    supp.rename(columns={
+        "gameId": "game_id", 
+        "playId": "play_id", 
+        "passResult": "pass_result",
+        "expectedPointsAdded": "epa"
+    }, inplace=True)
 
     print("[INFO] Searching for tracking files...", flush=True)
     # Pattern matching for specific week files
