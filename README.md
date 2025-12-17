@@ -100,7 +100,7 @@ Seattle emerges as the definitive 'High DIS / High DCI' archetype—the gold sta
 **Geometric Collapse in Real-Time**  
 *Ravens vs. 49ers - Christmas Day 2023*
  <div align="center">
-  <img src="" width="800">
+  <img src="https://i.imgur.com/1a4NByU.gif" width="800">
   <p><em>Animation 3. Visualizing Geometric Collapse in real time, Christmas Day Game 2023</em></p>
 
 Watch San Francisco's defense deteriorate from structured (DCI: 0.77, 
