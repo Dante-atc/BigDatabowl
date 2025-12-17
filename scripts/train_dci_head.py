@@ -65,8 +65,8 @@ pass_df = merged[merged['pass_result'].isin(valid_pass_types)].copy()
 
 print(f"[INFO] Dataset filtered. Analyzing {len(pass_df)} valid pass plays.")
 
-# Define Target (1 = Good Defense)
-pass_df['defensive_success'] = pass_df['pass_result'].apply(lambda x: 0 if x == 'C' else 1)
+# Define Target (1 = Good Defense)(Good Defense is any play where EPA <= 0)
+pass_df['defensive_success'] = (pass_df['epa'] <= 0).astype(int)
 
 # -----------------------------------------------------------
 # FEATURE ENGINEERING (THE UPGRADE)
