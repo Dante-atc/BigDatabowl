@@ -4,14 +4,12 @@
 ## Introduction
 The most critical moment in a passing play occurs between the quarterback's release and the ball's arrival. In these brief seconds **while the ball is in the air**, the defense faces its ultimate truth: deception ends, and pure structural execution begins. Coaches preach "finding the ball" and "maintaining leverage," yet traditional analytics largely ignore this phase, focusing instead on the result (catch, drop, or interception) rather than the process that produced it.
 
-This disconnect creates an **outcome bias**. A defensive back might maintain perfect positioning during the pass flight, only to be "beaten" by a spectacular catch; conversely, a blown coverage might be bailed out by an inaccurate throw. Current metrics struggle to capture the geometric reality of player movement during this flight phase, conflating offensive luck with defensive quality.
+This disconnect creates an **outcome bias**. A defensive back might maintain perfect positioning during the pass flight, only to be "beaten" by a spectacular catch. Current metrics struggle to capture the geometric reality of player movement during this flight phase, conflating offensive luck with defensive quality.
 
 This project answers the Big Data Bowl’s call to analyze movement with the ball in the air by introducing a paradigm shift: evaluating defense as a dynamic geometric structure. Leveraging **Self-Supervised Learning (SSL)**, we trained a Relational Graph Convolutional Network (R-GCN) to "watch" the secondary. By analyzing player coordinates specifically during the pass flight window, our model learned to quantify two novel dimensions of defensive movement:
 
 * **Defensive Coverage Index (DCI):** A measure of **Spatial Tightness**. As the ball travels, how aggressively is the defense constricting the target's space relative to an ideal archetype?
 * **Defensive Integrity Score (DIS):** A measure of **Structural Stability**. While tracking the ball, does the unit maintain its shape and leverage, or does the formation collapse into chaos?
-
-By isolating the **ball-in-air phase**, we reveal the hidden physics of the secondary. From the disciplined flight adjustments of the Seattle Seahawks to the high-variance risks of aggressive schemes, our framework provides the first scalable method to quantify the geometry of defensive intent exactly when it matters most.
 
 ## The Metrics
 
@@ -32,7 +30,7 @@ DCI and DIS are intentionally **complementary, not redundant**. Mapping them cre
 
 <div align="center">
   <img src="imgs/def_elite.jpeg" width="800">
-  <p><em>Figure 1. Defensive Landscape: The Elite Frontier. A scatter plot mapping NFL teams by Defensive Coverage Index (DCI) and Defensive Integrity Score (DIS), highlighting a "Pareto Frontier" (gold region) where teams achieve the optimal balance of coverage tightness and structural stability.</em></p>
+  <p><em>Figure 1. The Defensive Landscape: Risk vs. Reliability. A diagnostic map of NFL defensive identities. The gold "Pareto Frontier" marks the optimal trade-off between spatial tightness (DCI) and structural integrity (DIS). Teams outside this frontier reveal distinct schematic profiles, ranging from "High-Risk Chaos" to conservative "Bend-Don't-Break" shells.</em></p>
 </div>
 
 | Scenario | DCI | DIS | Interpretation |
@@ -105,11 +103,6 @@ We validated "The Eye Test" without human labels. The model independently discov
   <p><em>Figure 5. Probability of Explosive Play. Bar chart demonstrating the "high risk" nature of aggressive defense (Q4).</em></p>
 </div>
 
-<div align="center">
-  <img src="imgs/team_stats.jpeg" width="800">
-  <p><em>Figure 6. Team-Level Diagnostic. A comprehensive scatter plot mapping all NFL teams to diagnose scheme tendencies.</em></p>
-</div>
-
 ## General Conclusion
 This project demonstrates that the "black box" of defensive performance can be unlocked using geometric deep learning. By moving beyond outcome-based metrics and focusing on the underlying physics of player movement, we have established a new framework for evaluating the **process** of defense.
 
@@ -117,6 +110,7 @@ This project demonstrates that the "black box" of defensive performance can be u
 1.  **Risk/Reward:** Man-coverage aggression is high-variance gambling.
 2.  **Decoupling Intent:** We can distinguish between "bad calls" (Intent) and "bad execution" (Integrity).
 3.  **Validation:** DCI and DIS provide the missing vocabulary to answer: *"Was it a bad call, or just bad execution?"*
+4. **Algorithmic Objectivity (The "No-Bias" Advantage):** Unlike traditional grading (e.g., PFF grades) which relies on subjective human interpretation, DCI and DIS are derived purely from coordinate geometry. Our Self-Supervised model learned the physics of coverage **without ever being shown a label**, ensuring that the resulting metrics are mathematically objective and free from outcome reputation bias.
 
 By quantifying the geometry of intent, we transform defensive analysis from a retrospective accounting of yards lost into a proactive blueprint for structural optimization.
 
@@ -142,3 +136,29 @@ By quantifying the geometry of intent, we transform defensive analysis from a re
 * **Training Time:** ~7 hours (Self-Supervised Pretraining).
 * **Inference Speed:** <50ms per play on standard CPUs (post-training).
 * **Reproducibility:** While training used HPC, we provide pre-trained weights and an inference-only notebook (<8GB RAM) to ensure full reproducibility on consumer hardware.
+    * **GitHub Repository:** [(https://github.com/Dante-atc/BigDatabowl/tree/main)]
+
+### D. Automated Tactical Dashboard
+Beyond the static metrics, we developed an interactive tool capable of generating instant tactical reports for any play in the dataset. By simply inputting a Play ID into our Kaggle Notebook, coaches can retrieve a comprehensive geometric breakdown like the one below:
+
+<div align="center">
+  <img src="imgs/player_network.png" width="600">
+  <p><em>Figure 6. Automated Tactical Report generated by our interactive tool. This output quantifies formation stability and node stress for every play, translating geometric data into actionable scouting text.</em></p>
+</div>
+
+# NFL TACTICAL ANALYSIS - KEY INSIGHTS  
+==================================================  
+
+## STRESS ANALYSIS:  
+- **Average Node Stress**: 0.592 (High Tension)  
+- **Maximum Stress Recorded**: 1.000 (Critical Breakdown)  
+
+## FORMATION ANALYSIS:  
+- **Formation X Stability**: 0.42 (Vertical Vulnerability)  
+- **Formation Y Stability**: 0.27 (Lateral Breakdown)  
+
+## RECOMMENDATION:  
+- Focus on relative positioning rather than absolute formations.  
+- Analyze zone transitions for tactical insights.  
+
+> **Kaggle Tactical Dashboard:** [Link] – An interactive tool that generates automated scouting reports (Formation Stability, Stress Analysis, Zone Distributions) for any play ID in the dataset, democratizing access to complex geometric insights.
