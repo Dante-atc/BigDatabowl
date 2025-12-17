@@ -1,44 +1,65 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Phase 0 — Raw Data Preprocessing (ETL)
+======================================
+
+SUMMARY
+-------
+This script serves as the primary ETL pipeline for the raw NFL tracking data. 
+It ingests split CSV files, standardizes physical units, normalizes field 
+direction (Left->Right), and merges game metadata.
+
+Output:
+    A single compressed Parquet file ('plays_processed.parquet') optimized for 
+    loading into the Self-Supervised Learning (SSL) pipeline.
+
+Functions:
+    - flip_play_direction: Standardizes coordinates to a single orientation.
+    - normalize_physical_columns: Converts mixed units (e.g., "6-2") to standard integers.
+    - merge_input_output: Combines disjoint tracking files.
+    - compress_play: Filters essential columns for the backbone model.
+"""
+
 import os
 import glob
 import pandas as pd
 import numpy as np
 
-# ============================================================
-# CONFIG
-# ============================================================
+# -----------------------------------------------------------
+# CONFIGURATION
+# -----------------------------------------------------------
 
-# Apuntamos a la raíz del proyecto
+# Root Project Path
 BASE_PROJECT_PATH = "/lustre/proyectos/p037"
 
-# Esta es la ruta raíz de los datos que encontramos
+# Raw Data Directory
 ACTUAL_DATA_ROOT = f"{BASE_PROJECT_PATH}/datasets/raw/114239_nfl_competition_files_published_analytics_final"
-
-# Actualizamos todas las rutas para usarla
 TRAIN_PATH = f"{ACTUAL_DATA_ROOT}/train"
 SUPPLEMENTARY = f"{ACTUAL_DATA_ROOT}/supplementary_data.csv"
 
-# El destino sigue siendo el mismo
+# Output Directory
 OUTPUT_DIR = f"{BASE_PROJECT_PATH}/datasets/processed"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ============================================================
-# HELPERS
-# (Tu código de helpers va aquí... flip_play_direction, etc.)
-# ============================================================
+
+# -----------------------------------------------------------
+# HELPER FUNCTIONS
+# -----------------------------------------------------------
 
 def flip_play_direction(df):
     """
-    Unifica la dirección del campo:
-    Si play_direction == "left", flippear coordenadas para que TODO apunte a "right".
+    Standardizes field direction.
+    If play_direction == "left", transforms coordinates so the offense always moves "right".
     """
     left_mask = df["play_direction"] == "left"
 
-    # Flip x: campo de 120 yardas
+    # Flip X (120-yard field standard) & Y (53.3 yards width)
     df.loc[left_mask, "x"] = 120 - df.loc[left_mask, "x"]
     df.loc[left_mask, "y"] = 53.3 - df.loc[left_mask, "y"]
 
-    # Normalizar orientación
+    # Normalize orientation (o) and direction (dir)
     df.loc[left_mask, "o"] = (df.loc[left_mask, "o"] + 180) % 360
     df.loc[left_mask, "dir"] = (df.loc[left_mask, "dir"] + 180) % 360
 
@@ -48,19 +69,20 @@ def flip_play_direction(df):
 
 def normalize_physical_columns(df):
     """
-    Normaliza columnas físicas y convierte dobles formatos (como altura ft-in → pulgadas)
+    Converts physical attributes to standard numerical units.
+    Example: '6-2' (ft-in) -> 74 (inches).
     """
-    # Convert player_height from ft-in to total inches
     if "player_height" in df.columns and df["player_height"].dtype == object:
         df["player_height"] = df["player_height"].apply(
-            lambda x: int(x.split("-")[0]) * 12 + int(x.split("-")[1]) if isinstance(x, str) and '-' in x else np.nan
+            lambda x: int(x.split("-")[0]) * 12 + int(x.split("-")[1]) 
+            if isinstance(x, str) and '-' in x else np.nan
         )
     return df
 
 
 def merge_input_output(input_df, output_df):
     """
-    Une input y output en un único dataframe continuo frame-by-frame.
+    Merges disjoint input/output tracking files into a single timeline.
     """
     return pd.concat([input_df, output_df], axis=0).sort_values(
         ["game_id", "play_id", "nfl_id", "frame_id"]
@@ -69,95 +91,93 @@ def merge_input_output(input_df, output_df):
 
 def compress_play(df):
     """
-    Agrupa un play completo y devuelve:
-    - Tensor de frames
-    - Metadata de jugada
+    Selects only the columns required for the SSL backbone model to save memory.
     """
-    # Keep only columns required for SSL backbone
     keep_cols = [
         "game_id", "play_id", "frame_id", "nfl_id", "player_position",
         "player_side", "x", "y", "s", "a", "o", "dir"
     ]
 
-    # Filtra solo columnas que existen
+    # Filter only existing columns
     existing_cols = [col for col in keep_cols if col in df.columns]
     df = df[existing_cols].copy()
-
     df = df.sort_values(["frame_id", "nfl_id"])
     return df
 
-# ============================================================
-# PIPELINE
-# ============================================================
+
+# -----------------------------------------------------------
+# MAIN PIPELINE
+# -----------------------------------------------------------
 
 def main():
-    print("Cargando supplementary data...", flush=True)
-    
-    # Añadimos low_memory=False para silenciar el DtypeWarning
+    print("[INFO] Loading supplementary metadata...", flush=True)
     supp = pd.read_csv(SUPPLEMENTARY, low_memory=False)
-
-    print("Buscando archivos de tracking...", flush=True)
     
-    # --- CAMBIO AQUÍ: Usamos 'w??.csv' para ser más específicos ---
+    # Standardize column names (camelCase -> snake_case) for pipeline consistency
+    supp.rename(columns={
+        "gameId": "game_id", 
+        "playId": "play_id", 
+        "passResult": "pass_result",
+        "expectedPointsAdded": "epa"
+    }, inplace=True)
+
+    print("[INFO] Searching for tracking files...", flush=True)
+    # Pattern matching for specific week files
     input_files = sorted(glob.glob(f"{TRAIN_PATH}/input_2023_w??.csv"))
     output_files = sorted(glob.glob(f"{TRAIN_PATH}/output_2023_w??.csv"))
     
-    print(f"--- DEBUG: Encontrados {len(input_files)} input y {len(output_files)} output ---", flush=True)
+    print(f"       Found {len(input_files)} input files and {len(output_files)} output files.", flush=True)
 
     if not input_files or not output_files:
-        print("Error: No se encontraron archivos de input u output. Revisa las rutas.", flush=True)
-        print(f"Buscando en (input): {TRAIN_PATH}", flush=True)
-        print(f"Buscando en (output): {TRAIN_PATH}", flush=True)
+        print("[ERROR] No input or output files found. Check paths.")
+        print(f"       Search Path: {TRAIN_PATH}")
         return
 
-    print(f"Encontrados {len(input_files)} archivos de input y {len(output_files)} de output.", flush=True)
     all_plays = []
 
     for in_path, out_path in zip(input_files, output_files):
-
-        print(f"Procesando {in_path} y {out_path}...", flush=True)
+        print(f"[INFO] Processing pair: {os.path.basename(in_path)} | {os.path.basename(out_path)}...", flush=True)
+        
         input_df = pd.read_csv(in_path)
         output_df = pd.read_csv(out_path)
 
-        # --- CAMBIO DE LÓGICA ---
-        
-        # 1. Arregla altura, etc. en el input
+        # 1. Normalize Units
         input_df = normalize_physical_columns(input_df)
 
-        # 2. Únelos. 'play_direction' será NaN para las filas de output
+        # 2. Merge Timelines
         merged = merge_input_output(input_df, output_df)
         
-        # 3. Rellena 'play_direction' para toda la jugada
-        # (Asumiendo que es constante por 'play_id')
+        # 3. Fill 'play_direction' (constant per play)
         merged['play_direction'] = merged.groupby('play_id')['play_direction'].ffill().bfill()
         
-        # 4. AHORA SÍ, voltea el dataframe completo
+        # 4. Standardize Direction (Left -> Right)
         merged = flip_play_direction(merged)
 
-        # Merge with supplementary metadata (game, EPA, etc.)
+        # 5. Merge Metadata (Validate Many-to-One relationship)
         merged = merged.merge(
-        supp,
-        on=["game_id", "play_id"],
-        how="left",
-        validate="m:1"  # <-- ¡CAMBIO AQUÍ!
-    )
+            supp,
+            on=["game_id", "play_id"],
+            how="left",
+            validate="m:1"
+        )
 
-        # Group play
+        # 6. Compress and Store
         for (g, p), play_df in merged.groupby(["game_id", "play_id"]):
             processed = compress_play(play_df)
             all_plays.append(processed)
 
     if not all_plays:
-        print("No se procesaron jugadas.", flush=True)
+        print("[WARN] No plays were processed.")
         return
 
-    print(f"Total de jugadas procesadas: {len(all_plays)}", flush=True)
+    print(f"[INFO] Total plays processed: {len(all_plays)}", flush=True)
 
-    # Save all plays as parquet list (fast, compressed)
+    # Export to Parquet
     out_file = f"{OUTPUT_DIR}/plays_processed.parquet"
+    print(f"[INFO] Saving compressed dataset...", flush=True)
     pd.concat(all_plays).to_parquet(out_file)
 
-    print(f"✅ Dataset procesado guardado en: {out_file}", flush=True)
+    print(f"[SUCCESS] Dataset saved at: {out_file}", flush=True)
 
 
 if __name__ == "__main__":
