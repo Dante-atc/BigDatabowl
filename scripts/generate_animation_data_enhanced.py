@@ -46,9 +46,12 @@ TARGET_PLAY_ID = 1531
 
 # Paths setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Try standard repo location first
-RAW_DATA = os.path.join(BASE_DIR, "plays_processed.parquet")
+
+# Absolute path to the real parquet on p037
+RAW_DATA = "/lustre/proyectos/p037/datasets/processed/plays_processed.parquet"
+
 MODEL_PATH = os.path.join(BASE_DIR, "model", "backbone_ssl_final.pth")
+
 
 # Output filename
 OUT_CSV = f"animation_data_{TARGET_GAME_ID}_{TARGET_PLAY_ID}.csv"
