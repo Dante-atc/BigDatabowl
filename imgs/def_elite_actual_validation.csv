@@ -1,0 +1,2 @@
+metrics_source,metrics_rows,supp_rows,merged_rows,merged_coverage,teams,dci_min,dci_max,dis_min,dis_max,dci_in_0_1_share,dis_in_0_1_share
+C:\Users\Usuario\Documents\bigdatabowl\BigDatabowl\metrics_playlevel_supervised.parquet,14108,18009,14108,1.0,32,0.09757864337032848,0.7253077092771251,0.00014402063,0.979067,1.0,1.0

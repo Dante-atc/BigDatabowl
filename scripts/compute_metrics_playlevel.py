@@ -37,6 +37,9 @@ PCA_PATH = "/lustre/home/dante/compartido/clusters/PCA_embeddings.npy"
 AIDEAL_PATH = "/lustre/home/dante/compartido/clusters/final/A_ideal_best.parquet"
 OUT_PATH = "/lustre/home/dante/compartido/metrics/metrics_playlevel_baseline.parquet"
 
+DCI_LAMBDA = 1.0
+DIS_LAMBDA = 1.0
+
 os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
 
 
@@ -99,10 +102,16 @@ spacing_proxy = np.exp(-dist_to_centroid)
 # Integrity Proxy: Measures 'Tactical Clarity' (Ambiguity).
 integrity_proxy = (dist_to_second - dist_to_centroid) / (dist_to_second + 1e-6)
 
-# Baseline Metrics (Uncalibrated)
-alpha, beta, gamma = 1.0, 1.0, 1.0
-dci_base = np.exp(-alpha * dist_to_centroid)
-dis_base = (beta * spacing_proxy + gamma * integrity_proxy) / 2.0
+# Baseline Metrics (Formula-aligned)
+# DCI = exp(-lambda * ||z - mu_tight||^2)
+# Here dist_to_centroid is ||z - mu_tight|| in latent space.
+dci_base = np.exp(-DCI_LAMBDA * (dist_to_centroid ** 2))
+
+# DIS = 1 - tanh(lambda * ||A_obs - A_ideal||_F)
+# In this pipeline, embeddings/centroids are flattened latent structural vectors,
+# so the Frobenius norm between matrix forms is equivalent to the L2 norm here.
+structural_decay_frob = dist_to_centroid
+dis_base = 1.0 - np.tanh(DIS_LAMBDA * structural_decay_frob)
 
 
 # -----------------------------------------------------------
@@ -113,6 +122,7 @@ print("[INFO] Exporting baseline metrics...")
 df_out["cluster_id"] = closest
 df_out["distance_to_ideal"] = dist_to_centroid
 df_out["distance_to_second"] = dist_to_second
+df_out["structural_decay_frob"] = structural_decay_frob
 df_out["spacing_proxy"] = spacing_proxy
 df_out["integrity_proxy"] = integrity_proxy
 df_out["dci_base"] = dci_base

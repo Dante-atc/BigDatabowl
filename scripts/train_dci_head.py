@@ -20,6 +20,8 @@ from sklearn.preprocessing import OrdinalEncoder
 import os
 import joblib
 
+DIS_LAMBDA = 1.0
+
 # -----------------------------------------------------------
 # CONFIGURATION
 # -----------------------------------------------------------
@@ -147,7 +149,10 @@ print(f"\n DCI vs EPA CORRELATION: {corr_epa:.4f}")
 # EXPORT
 # -----------------------------------------------------------
 
-pass_df['dis_final'] = pass_df['integrity_proxy']
+if 'dis_base' in pass_df.columns:
+    pass_df['dis_final'] = pass_df['dis_base']
+else:
+    pass_df['dis_final'] = 1.0 - np.tanh(DIS_LAMBDA * pass_df['distance_to_ideal'])
 
 output_cols = [
     'game_id', 'play_id', 
