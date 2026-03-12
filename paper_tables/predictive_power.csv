@@ -1,0 +1,4 @@
+Metric,Mean (Success),Mean (Failure),Difference,Cohen's d,Point-Biserial r,p-value
+Yards Gained,1.440,14.282,-12.842,-1.668,-0.6328,0.00e+00
+DCI (Coverage Index),0.310,0.310,+0.000,0.002,0.0011,8.92e-01
+DIS (Integrity Score),0.430,0.428,+0.002,0.007,0.0034,6.89e-01
